@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import React from 'react';
 
 const baseURL = 'https://todo-app-express-backend-rtbt.onrender.com';
@@ -8,51 +8,76 @@ export interface TaskItem {
   text: string;
 }
 
-export const getAllTasks = (setTasks: React.Dispatch<React.SetStateAction<TaskItem[]>>) => {
-  axios.get<TaskItem[]>(`${baseURL}`).then(({ data }) => {
-    setTasks(data);
-  }).catch((err) => console.log(err));
+const requestWithRetry = async <T>(requestFn: () => Promise<T>, retries = 2, delay = 700): Promise<T> => {
+  try {
+    return await requestFn();
+  } catch (error) {
+    const err = error as AxiosError;
+
+    if (retries <= 0) throw err;
+
+    const status = err.response?.status;
+    if (status === 502 || status === 503 || status === 504) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return requestWithRetry(requestFn, retries - 1, delay * 1.5);
+    }
+
+    throw err;
+  }
 };
 
-export const addTask = (
+export const getAllTasks = async (setTasks: React.Dispatch<React.SetStateAction<TaskItem[]>>) => {
+  try {
+    const response = await requestWithRetry(() => axios.get<TaskItem[]>(`${baseURL}`));
+    setTasks(response.data);
+  } catch (err) {
+    console.log('Erro ao carregar tarefas (retry):', err);
+    throw err;
+  }
+};
+
+export const addTask = async (
   text: string,
   setText: React.Dispatch<React.SetStateAction<string>>,
-  setTasks: React.Dispatch<React.SetStateAction<TaskItem[]>>
+  setTasks: React.Dispatch<React.SetStateAction<TaskItem[]>>,
 ) => {
-  axios
-    .post(`${baseURL}/save`, { text })
-    .then(() => {
-      setText('');
-      getAllTasks(setTasks);
-    })
-    .catch((err) => console.log(err));
+  try {
+    await requestWithRetry(() => axios.post(`${baseURL}/save`, { text }));
+    setText('');
+    await getAllTasks(setTasks);
+  } catch (err) {
+    console.log('Erro ao adicionar tarefa (retry):', err);
+    throw err;
+  }
 };
 
-export const updateTask = (
+export const updateTask = async (
   taskId: string,
   text: string,
   setTasks: React.Dispatch<React.SetStateAction<TaskItem[]>>,
   setText: React.Dispatch<React.SetStateAction<string>>,
-  setIsUpdating: React.Dispatch<React.SetStateAction<boolean>>
+  setIsUpdating: React.Dispatch<React.SetStateAction<boolean>>,
 ) => {
-  axios
-    .post(`${baseURL}/update`, { _id: taskId, text })
-    .then(() => {
-      setText('');
-      setIsUpdating(false);
-      getAllTasks(setTasks);
-    })
-    .catch((err) => console.log(err));
+  try {
+    await requestWithRetry(() => axios.post(`${baseURL}/update`, { _id: taskId, text }));
+    setText('');
+    setIsUpdating(false);
+    await getAllTasks(setTasks);
+  } catch (err) {
+    console.log('Erro ao atualizar tarefa (retry):', err);
+    throw err;
+  }
 };
 
-export const deleteTask = (
+export const deleteTask = async (
   _id: string,
-  setTasks: React.Dispatch<React.SetStateAction<TaskItem[]>>
+  setTasks: React.Dispatch<React.SetStateAction<TaskItem[]>>,
 ) => {
-  axios
-    .post(`${baseURL}/delete`, { _id })
-    .then(() => {
-      getAllTasks(setTasks);
-    })
-    .catch((err) => console.log(err));
+  try {
+    await requestWithRetry(() => axios.post(`${baseURL}/delete`, { _id }));
+    await getAllTasks(setTasks);
+  } catch (err) {
+    console.log('Erro ao deletar tarefa (retry):', err);
+    throw err;
+  }
 };

@@ -1,17 +1,27 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Platform, StatusBar as RNStatusBar } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, Platform, StatusBar as RNStatusBar, Image, Button } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import Task from './src/components/Task';
+import TaskList from './src/components/TaskList';
 import { addTask, deleteTask, getAllTasks, updateTask, TaskItem } from './src/utils/handle-api';
 
 export default function App() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [text, setText] = useState("");
+  const [text, setText] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
-  const [taskId, setTaskId] = useState("");
+  const [taskId, setTaskId] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    getAllTasks(setTasks);
+    const loadTasks = async () => {
+      try {
+        await getAllTasks(setTasks);
+        setErrorMessage('');
+      } catch (error) {
+        setErrorMessage('Servidor indisponível no momento. Tente novamente.');
+      }
+    };
+
+    loadTasks();
   }, []);
 
   const updateMode = (_id: string, text: string) => {
@@ -20,43 +30,68 @@ export default function App() {
     setTaskId(_id);
   };
 
+  const deleteAllTasks = async () => {
+    if (tasks.length === 0) return;
+
+    try {
+      for (const item of tasks) {
+        await deleteTask(item._id, setTasks);
+      }
+      setErrorMessage('');
+    } catch {
+      setErrorMessage('Não foi possível excluir todas as tarefas agora. Tente novamente.');
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      if (isUpdating) {
+        await updateTask(taskId, text, setTasks, setText, setIsUpdating);
+      } else {
+        await addTask(text, setText, setTasks);
+      }
+      setErrorMessage('');
+      setText('');
+    } catch {
+      setErrorMessage('Falha de rede ao salvar. Repetindo em breve.');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+        <Image source={require('./assets/task-app-banner.png')} style={styles.headerImage} resizeMode="contain" />
         <Text style={styles.header}>Tarefas</Text>
+
+        <Text style={styles.counter}>{tasks.length} tarefa(s)</Text>
 
         <View style={styles.top}>
           <TextInput
             style={styles.input}
             placeholder="Adicione uma tarefa..."
+            placeholderTextColor="#666"
             value={text}
             onChangeText={(val) => setText(val)}
+            maxLength={120}
+            keyboardType="default"
+            returnKeyType="done"
           />
 
           <TouchableOpacity
             style={styles.addButton}
-            onPress={
-              isUpdating
-                ? () => updateTask(taskId, text, setTasks, setText, setIsUpdating)
-                : () => addTask(text, setText, setTasks)
-            }
+            onPress={handleSave}
           >
-            <Text style={styles.addButtonText}>
-              {isUpdating ? "Atualizar" : "Adicionar"}
-            </Text>
+            <Text style={styles.addButtonText}>{isUpdating ? 'Atualizar' : 'Adicionar'}</Text>
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-          {tasks.map((item) => (
-            <Task
-              key={item._id}
-              text={item.text}
-              updateMode={() => updateMode(item._id, item.text)}
-              deleteToDo={() => deleteTask(item._id, setTasks)}
-            />
-          ))}
-        </ScrollView>
+        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
+        <View style={styles.deleteAllButton}>
+          <Button title="Excluir todas as tarefas" onPress={deleteAllTasks} color="#d63031" />
+        </View>
+
+        <TaskList tasks={tasks} onEdit={(item) => updateMode(item._id, item.text)} onDelete={(id) => deleteTask(id, setTasks)} />
       </View>
       <StatusBar style="auto" />
     </SafeAreaView>
@@ -75,33 +110,47 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
     paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  headerImage: {
+    width: '100%',
+    height: 120,
+    marginBottom: 12,
   },
   header: {
-    marginTop: 16,
+    marginTop: 2,
     textAlign: 'center',
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
+  },
+  counter: {
+    marginTop: 8,
+    textAlign: 'center',
+    color: '#555',
+    fontSize: 16,
   },
   top: {
     marginTop: 16,
     flexDirection: 'row',
-    gap: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   input: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#000',
+    marginRight: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 10,
     fontSize: 16,
+    backgroundColor: '#f8f8f8',
   },
   addButton: {
-    backgroundColor: '#000',
+    backgroundColor: '#0984e3',
     paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 4,
+    paddingHorizontal: 16,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -110,11 +159,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-  list: {
-    marginTop: 16,
-    flex: 1,
+  deleteAllButton: {
+    marginTop: 14,
+    marginBottom: 8,
   },
-  listContent: {
-    paddingBottom: 24,
-  }
+  errorText: {
+    marginTop: 10,
+    color: '#d63031',
+    textAlign: 'center',
+  },
 });

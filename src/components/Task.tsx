@@ -42,11 +42,11 @@ const styles = StyleSheet.create({
   },
   icons: {
     flexDirection: 'row',
-    gap: 16,
     marginLeft: 16,
   },
   icon: {
     padding: 2,
+    marginLeft: 16,
   },
 });
 
