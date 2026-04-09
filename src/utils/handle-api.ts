@@ -1,11 +1,13 @@
 import axios, { AxiosError } from 'axios';
 import React from 'react';
 
-const baseURL = 'https://todo-app-express-backend-rtbt.onrender.com';
+const baseURL = process.env.EXPO_PUBLIC_API_URL;
 
 export interface TaskItem {
   _id: string;
   text: string;
+  completed?: boolean;
+  dueDate?: string | null;
 }
 
 const requestWithRetry = async <T>(requestFn: () => Promise<T>, retries = 2, delay = 700): Promise<T> => {
@@ -38,11 +40,13 @@ export const getAllTasks = async (setTasks: React.Dispatch<React.SetStateAction<
 
 export const addTask = async (
   text: string,
+  completed: boolean,
+  dueDate: string | null,
   setText: React.Dispatch<React.SetStateAction<string>>,
   setTasks: React.Dispatch<React.SetStateAction<TaskItem[]>>,
 ) => {
   try {
-    await requestWithRetry(() => axios.post(`${baseURL}/save`, { text }));
+    await requestWithRetry(() => axios.post(`${baseURL}/save`, { text, completed, dueDate }));
     setText('');
     await getAllTasks(setTasks);
   } catch (err) {
@@ -54,12 +58,14 @@ export const addTask = async (
 export const updateTask = async (
   taskId: string,
   text: string,
+  completed: boolean,
+  dueDate: string | null,
   setTasks: React.Dispatch<React.SetStateAction<TaskItem[]>>,
   setText: React.Dispatch<React.SetStateAction<string>>,
   setIsUpdating: React.Dispatch<React.SetStateAction<boolean>>,
 ) => {
   try {
-    await requestWithRetry(() => axios.post(`${baseURL}/update`, { _id: taskId, text }));
+    await requestWithRetry(() => axios.post(`${baseURL}/update`, { _id: taskId, text, completed, dueDate }));
     setText('');
     setIsUpdating(false);
     await getAllTasks(setTasks);
